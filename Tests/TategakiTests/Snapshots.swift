@@ -40,6 +40,9 @@ import Tategaki
         ruby("智", "ち"), text("に"), ruby("働", "はたら"), text("けば"), ruby("角", "かど"), text("が"), ruby("立", "た"), text("つ。"),
         ruby("情", "じょう"), text("に"), ruby("棹", "さお"), text("させば"), ruby("流", "なが"), text("される。"),
         marked("とかくに人の世は住みにくい"), text("。"),
-        text("圏点は"), marked("黒丸", .dot), text("や"), marked("白丸", .circle), text("や"), marked("白胡麻", .openSesame), text("にもできる"), upright("!?"),
+    ], maxHeight: 330, columnGap: 6))
+    try write("emphasis.png", TategakiText(runs: [
+        text("圏点は"), marked("胡麻"), text("のほか、"), marked("黒丸", .dot), text("や"), marked("白丸", .circle), text("や"), marked("白胡麻", .openSesame),
+        text("にもできる"), upright("!?"),
     ], maxHeight: 330, columnGap: 6))
 }

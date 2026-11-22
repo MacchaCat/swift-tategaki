@@ -35,6 +35,22 @@ import Testing
     #expect(inkIsInsideBounds(layout([run("春夏秋\n"), run("承", ruby: "うけたまわ")])))
 }
 
+@Test func aRunWithRubyMovesToTheNextColumnWhole() {
+    // Three characters fit before the ruby run, which would straddle the end of the column.
+    let moved = layout([run("前前前"), run("春夏", ruby: "はるなつ"), run("後")], maxHeight: 85)
+    #expect(moved.columns.map(\.range) == [0..<3, 3..<6])
+}
+
+@Test func aRunWithRubyLongerThanAColumnLosesNoText() {
+    // Core Text has nowhere good to break such a run and sets it a character to a column. That is poor, but
+    // nothing may be dropped, overlong or drawn outside the view.
+    let long = layout([run("前"), run("春夏秋冬春夏", ruby: "はるなつあきふゆはるなつ"), run("後")], maxHeight: 85)
+    #expect(long.columns.last?.range.upperBound == 8)
+    #expect(long.columns.allSatisfy { $0.length <= 85 })
+    #expect(long.size.height <= 86)
+    #expect(inkIsInsideBounds(long))
+}
+
 @Test func rubyIsNotPartOfTheText() {
     let withRuby = layout([run("山路", ruby: "やまみち"), run("を登る")])
     #expect(withRuby.string as String == "山路を登る")
