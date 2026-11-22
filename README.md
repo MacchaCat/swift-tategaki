@@ -1,6 +1,7 @@
 # Tategaki
 
-Vertical Japanese text (縦書き) for SwiftUI, with ruby, tate-chu-yoko and emphasis marks.
+Vertical Japanese text (縦書き) for SwiftUI, with ruby, tate-chu-yoko, emphasis marks and the punctuation spacing
+of Japanese typesetting.
 
 SwiftUI has no vertical text. `TategakiText` lays text out with Core Text in columns that run top to bottom and
 stack right to left, and draws it in a view of exactly the size the columns need. It has no dependencies and uses no
@@ -138,6 +139,34 @@ A mark is set to the right of each character of the run; spaces and punctuation 
 `.sesame` (﹅), `.openSesame` (﹆), `.dot`, `.circle`, and `.custom("▲")` for a mark of your own. A run that has
 ruby shows the ruby and no marks, because the two would share the same place.
 
+### Spacing
+
+Core Text gives every punctuation mark a full character's width, so two in a row stand a whole character apart,
+and it sets Latin letters hard against the kanji beside them. Japanese typesetting does neither. `TategakiText`
+makes three adjustments, each from a clause of the W3C's
+[Requirements for Japanese Text Layout](https://www.w3.org/TR/jlreq/) (JLREQ):
+
+<img src="Documentation/spacing.png" alt="The same sentence set twice. With the spacing rules, brackets and commas that follow one another sit close together, a column that begins with a bracket starts flush with the top, and the word Swift stands a little apart from the Japanese text around it. With Core Text's spacing there are wide gaps between the marks." height="330">
+
+- **Consecutive punctuation is closed up** (JLREQ 3.1.4). 。「 or 」「 takes one and a half characters, not two.
+- **An opening bracket at the top of a column is flush with the top** (JLREQ 3.1.5), without the blank that
+  precedes it elsewhere. This applies to every column, the first of a paragraph included, since the text isn't
+  indented.
+- **A quarter of a character separates Japanese text from Latin letters and digits** (JLREQ 3.2.6). A
+  tate-chu-yoko run gets none, and nor does a boundary where you typed a space.
+
+They are on by default. To choose among them, or to get the spacing Core Text gives:
+
+```swift
+TategakiText(text).spacing(TategakiSpacing(spacesWesternText: false))
+TategakiText(text).spacing(.none)
+```
+
+A mark is closed up only if the half to be removed is blank in the font. A font that draws its full stop in the
+middle of the square, as fonts for Chinese do, is left as it is.
+
+This is not the whole of JLREQ. See below for what is missing.
+
 ### Selection and copying (macOS)
 
 ```swift
@@ -158,8 +187,19 @@ The view is one accessibility element whose label is its text, without ruby.
 
 ## What it doesn't do yet
 
-Line breaking, punctuation and glyph choice are left to Core Text and the font, and haven't been checked against
-the rules of Japanese typesetting (JIS X 4051, JLREQ).
+The spacing rules above cover three clauses of JLREQ. Line breaking and glyph choice are still left to Core Text
+and the font. Core Text keeps closing brackets, commas and full stops off the top of a column and opening brackets
+off the bottom, but the following are not done:
+
+- **The rest of JLREQ's spacing table.** Only the pairs named in 3.1.4 are closed up.
+- **Marks at the end of a column** (JLREQ 3.1.9), and hanging punctuation. Core Text moves a character to the
+  next column instead.
+- **Strict line-breaking rules.** A long vowel mark (ー) or a small kana (っ, ょ) can start a column.
+- **Space after a run of two or more characters with ruby**, where Western text follows it.
+- The quarter space counts when Core Text decides where to break, so a column that had room for exactly one more
+  character before Western text takes one fewer.
+
+Other things it doesn't do:
 
 - **Selection on iOS.** `selectable()` is macOS only.
 - **Selection by keyboard or by double-click.** Only dragging and Select All.
@@ -175,6 +215,10 @@ the rules of Japanese typesetting (JIS X 4051, JLREQ).
 - Built and tested on macOS 27 with Swift 6.4 (Xcode 27). The tests check column count and order, bounds, that
   every character, ruby and mark is drawn inside the view, the rectangle of each character, and what a selection
   copies. The rendered output was checked by eye.
+- The spacing rules were tested on every pair JLREQ 3.1.4 names and every mark of each class, in Hiragino Mincho
+  and Hiragino Sans. A further test sets every pair of marks in eight fonts, Chinese ones among them, and checks
+  that closing them up never makes two marks overlap. With spacing off, the sample images are byte for byte those
+  of 0.2.
 - CI builds and runs the tests on GitHub's macOS runner, which had Swift 6.3 on macOS 26 when this was written.
   The manifest asks for Swift 6.0 tools, but nothing older than 6.3 has been tried.
 - Selection was exercised in the demo app by its self-test, which sends mouse events to a real window, invokes the
@@ -201,6 +245,9 @@ SwiftUI で日本語を縦書きで表示するためのライブラリです。
 
 ルビ、縦中横、圏点に対応しています。文字の選択とコピーは macOS のみ対応しています。
 縦中横は自動では行いません。指定のない英数字は横倒しになります。
+
+約物の連続の詰め、行頭の始め括弧の天付き、和欧文間の四分アキを行います（JLREQ 3.1.4、3.1.5、3.2.6）。
+行末の約物の処理、ぶら下げ、強い禁則には対応していません。
 
 ## License
 

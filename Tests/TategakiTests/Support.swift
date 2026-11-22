@@ -14,12 +14,14 @@ func run(_ text: String, font: TategakiFont = mincho, ruby: String? = nil, empha
     .init(text: text, font: font, color: black, ruby: ruby, emphasis: emphasis, isTateChuYoko: tateChuYoko)
 }
 
-func layout(_ runs: [TategakiLayoutKey.Run], maxHeight: CGFloat = .infinity, columnGap: CGFloat = 5) -> TategakiLayout {
-    TategakiLayout(TategakiLayoutKey(runs: runs, maxHeight: maxHeight, columnGap: columnGap))
+func layout(_ runs: [TategakiLayoutKey.Run], maxHeight: CGFloat = .infinity, columnGap: CGFloat = 5,
+            spacing: TategakiSpacing = .standard) -> TategakiLayout {
+    TategakiLayout(TategakiLayoutKey(runs: runs, maxHeight: maxHeight, columnGap: columnGap, spacing: spacing))
 }
 
-func layout(_ text: String, font: TategakiFont = mincho, maxHeight: CGFloat = .infinity, columnGap: CGFloat = 5) -> TategakiLayout {
-    layout([run(text, font: font)], maxHeight: maxHeight, columnGap: columnGap)
+func layout(_ text: String, font: TategakiFont = mincho, maxHeight: CGFloat = .infinity, columnGap: CGFloat = 5,
+            spacing: TategakiSpacing = .standard) -> TategakiLayout {
+    layout([run(text, font: font)], maxHeight: maxHeight, columnGap: columnGap, spacing: spacing)
 }
 
 /// A layout drawn the way the view's Canvas draws it, top left origin with y pointing down, into a bitmap with a

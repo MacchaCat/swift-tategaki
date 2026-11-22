@@ -12,6 +12,8 @@ import SwiftUI
 /// The view doesn't take its height from the space it's offered. A column is as long as its text unless you give
 /// `maxHeight`, and then the text continues in a new column to the left.
 ///
+/// Punctuation and Western text are spaced as Japanese typesetting spaces them; see ``TategakiSpacing``.
+///
 /// Build the text from ``Run``s to give parts of it their own font and colour, ruby, emphasis marks, or to set
 /// digits upright:
 ///
@@ -55,6 +57,7 @@ public struct TategakiText: View {
     private var maxHeight: CGFloat
     private var columnGap: CGFloat
     private var isSelectable = false
+    private var spacingRules = TategakiSpacing.standard
 
     @Environment(\.self) private var environment
 
@@ -94,6 +97,14 @@ public struct TategakiText: View {
         return copy
     }
 
+    /// Chooses which of the spacing adjustments of Japanese typesetting are made. All of them are, unless you say
+    /// otherwise; pass `.none` for the spacing Core Text gives.
+    public func spacing(_ spacing: TategakiSpacing) -> TategakiText {
+        var copy = self
+        copy.spacingRules = spacing
+        return copy
+    }
+
     public var body: some View {
         let layout = TategakiLayoutCache.shared.layout(for: key)
         canvas(for: layout)
@@ -129,7 +140,8 @@ public struct TategakiText: View {
                       ruby: $0.ruby, emphasis: $0.emphasis, isTateChuYoko: $0.isTateChuYoko)
             },
             maxHeight: maxHeight,
-            columnGap: columnGap
+            columnGap: columnGap,
+            spacing: spacingRules
         )
     }
 }

@@ -18,6 +18,7 @@ struct TategakiLayoutKey: Hashable, Sendable {
     var runs: [Run]
     var maxHeight: CGFloat
     var columnGap: CGFloat
+    var spacing = TategakiSpacing.standard
 }
 
 /// Text laid out in columns that run top to bottom and stack right to left.
@@ -60,6 +61,9 @@ final class TategakiLayout: @unchecked Sendable {
     /// The runs with ruby that didn't fit in one column, as UTF-16 ranges. Core Text sets such a run a character to
     /// a column, which is never what was wanted, so each is reported with a warning in the log.
     let brokenRubyRuns: [Range<Int>]
+    /// Marks whose ink starts before the place Core Text reports for them, because the blank ahead of them was
+    /// closed up: how far before, by UTF-16 offset. See `SpacingRules.adjust`.
+    private let boundaryShifts: [Int: CGFloat]
 
     private static let logger = Logger(subsystem: "Tategaki", category: "layout")
 
@@ -77,6 +81,8 @@ final class TategakiLayout: @unchecked Sendable {
         }
         string = text.string as NSString
         boundaries = Self.boundaries(of: string, groups: groups)
+        var rules = SpacingRules()
+        boundaryShifts = rules.adjust(text, groups: groups, spacing: key.spacing)
 
         // Break the text into lines no longer than the columns may be.
         let typesetter = CTTypesetterCreateWithAttributedString(text)
@@ -108,15 +114,18 @@ final class TategakiLayout: @unchecked Sendable {
         let bare = NSMutableAttributedString(attributedString: text)
         bare.removeAttribute(.init(kCTRubyAnnotationAttributeName as String), range: NSRange(location: 0, length: bare.length))
         let bareTypesetter = CTTypesetterCreateWithAttributedString(bare)
-        struct Metrics { var length, ascent, descent, leading, halfRight: CGFloat; var ink: CGRect }
+        struct Metrics { var length, ascent, descent, leading, halfRight, lift: CGFloat; var ink: CGRect }
         let metrics = lines.map { entry -> Metrics in
             var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
             let length = CGFloat(CTLineGetTypographicBounds(entry.line, &ascent, &descent, &leading))
+                - SpacingRules.trailingSpace(of: text, in: entry.range)
+            let lift = key.spacing.setsColumnTopsFlush ? rules.lift(forColumnAt: entry.range.lowerBound, of: text, groups: groups) : 0
             let bareLine = CTTypesetterCreateLine(bareTypesetter, CFRange(location: entry.range.lowerBound, length: entry.range.count))
             var halfRight: CGFloat = 0
             _ = CTLineGetTypographicBounds(bareLine, &halfRight, nil, nil)
             let ink = CTLineGetBoundsWithOptions(entry.line, .useGlyphPathBounds)
-            return Metrics(length: length, ascent: ascent, descent: descent, leading: leading, halfRight: min(halfRight, ascent), ink: ink.isNull ? .zero : ink)
+            return Metrics(length: length, ascent: ascent, descent: descent, leading: leading, halfRight: min(halfRight, ascent),
+                           lift: lift, ink: ink.isNull ? .zero : ink)
         }
         var xs: [CGFloat] = []
         for (index, metric) in metrics.enumerated() {
@@ -129,20 +138,21 @@ final class TategakiLayout: @unchecked Sendable {
         }
 
         // The bounds: every column with its ruby, and any ink that reaches past the ends of a line, as ruby longer
-        // than its base does.
+        // than its base does. A column that starts with an opening bracket starts above the top by the blank that
+        // precedes the bracket, so that the bracket itself is at the top.
         var left = CGFloat.infinity, right = -CGFloat.infinity, top: CGFloat = 0, bottom: CGFloat = 0
         for (x, metric) in zip(xs, metrics) {
             left = min(left, x - metric.descent, x + metric.ink.minY)
             right = max(right, x + metric.ascent, x + metric.ink.maxY)
-            top = min(top, metric.ink.minX)
-            bottom = max(bottom, metric.length, metric.ink.maxX)
+            top = min(top, metric.ink.minX - metric.lift)
+            bottom = max(bottom, metric.length - metric.lift, metric.ink.maxX - metric.lift)
         }
         if lines.isEmpty { left = 0; right = 0 }
         left = floor(left)
         top = floor(top)
         size = CGSize(width: ceil(right) - left, height: ceil(bottom) - top)
         columns = zip(lines, zip(xs, metrics)).map { entry, placed in
-            Column(line: entry.line, range: entry.range, x: placed.0 - left, top: -top, length: placed.1.length,
+            Column(line: entry.line, range: entry.range, x: placed.0 - left, top: -top - placed.1.lift, length: placed.1.length,
                    halfLeft: placed.1.descent, halfRight: placed.1.halfRight)
         }
     }
@@ -245,15 +255,25 @@ final class TategakiLayout: @unchecked Sendable {
         // Columns are ordered right to left; take the one whose centre line is nearest.
         let column = columns.min { abs($0.x - point.x) < abs($1.x - point.x) }!
         let end = textEnd(of: column)
-        let along = point.y - column.top
-        var index = column.range.lowerBound
-        if along >= column.length {
-            index = end
-        } else if along > 0 {
-            let found = CTLineGetStringIndexForPosition(column.line, CGPoint(x: along, y: 0))
-            index = found == kCFNotFound ? column.range.lowerBound : min(max(found, column.range.lowerBound), end)
+        // Walk down the column's characters. The point is before the first one whose middle lies below it. A
+        // character's extent is the part of it inside the view: the bracket at the top of a flush column has its
+        // blank half above the view, and a click on the bracket must be able to land before it.
+        var low = 0, high = boundaries.count - 1
+        while low < high {
+            let middle = (low + high) / 2
+            if boundaries[middle] < column.range.lowerBound { low = middle + 1 } else { high = middle }
         }
-        return snapped(index)
+        var start = column.range.lowerBound
+        var top = max(column.top + offset(of: start, in: column), 0)
+        var next = low + (boundaries[low] == start ? 1 : 0)
+        while next < boundaries.count, boundaries[next] <= end {
+            let bottom = min(column.top + offset(of: boundaries[next], in: column), size.height)
+            if point.y < (top + bottom) / 2 { return start }
+            start = boundaries[next]
+            top = bottom
+            next += 1
+        }
+        return end
     }
 
     /// The boundary nearest to an index that isn't one.
@@ -275,7 +295,9 @@ final class TategakiLayout: @unchecked Sendable {
 
     private func offset(of index: Int, in column: Column) -> CGFloat {
         if index >= textEnd(of: column) { return max(column.length, CGFloat(CTLineGetOffsetForStringIndex(column.line, index, nil))) }
-        return CGFloat(CTLineGetOffsetForStringIndex(column.line, index, nil))
+        // A mark whose leading blank was closed up starts, to the eye, where its ink does.
+        let shift = index > column.range.lowerBound ? boundaryShifts[index] ?? 0 : 0
+        return CGFloat(CTLineGetOffsetForStringIndex(column.line, index, nil)) + shift
     }
 
     /// The end of a column's text, before the line break that ends the column if it has one.

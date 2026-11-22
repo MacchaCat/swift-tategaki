@@ -2,6 +2,16 @@
 
 This project follows [Semantic Versioning](https://semver.org). Until 1.0, a minor version may change the API.
 
+## 0.3.0
+
+- Spacing that follows three clauses of JLREQ: consecutive punctuation is closed up (3.1.4), an opening bracket at
+  the top of a column is set flush (3.1.5), and a quarter of a character separates Japanese text from Latin
+  letters and digits (3.2.6).
+- **This changes how existing text is laid out.** Text with two punctuation marks in a row, a column that starts
+  with an opening bracket, or Latin letters next to Japanese is now shorter or longer than in 0.2. Call
+  `.spacing(.none)` for the layout of 0.2, which is unchanged byte for byte in the sample images.
+- `TategakiSpacing` chooses which of the three adjustments are made.
+
 ## 0.2.0
 
 - Ruby (furigana): `Run(_:ruby:)` sets a reading to the right of a run.
