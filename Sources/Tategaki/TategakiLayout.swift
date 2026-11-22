@@ -1,6 +1,7 @@
 import CoreGraphics
 import CoreText
 import Foundation
+import os
 import SwiftUI
 
 /// What a layout is made from. Two equal keys give the same layout, so a layout can be cached by its key.
@@ -56,6 +57,11 @@ final class TategakiLayout: @unchecked Sendable {
     let size: CGSize
     /// Where a selection may start or end: between characters, never inside one, nor inside a tate-chu-yoko group.
     let boundaries: [Int]
+    /// The runs with ruby that didn't fit in one column, as UTF-16 ranges. Core Text sets such a run a character to
+    /// a column, which is never what was wanted, so each is reported with a warning in the log.
+    let brokenRubyRuns: [Range<Int>]
+
+    private static let logger = Logger(subsystem: "Tategaki", category: "layout")
 
     var columnCount: Int { columns.count }
     var columnOrigins: [CGFloat] { columns.map(\.x) }
@@ -63,8 +69,11 @@ final class TategakiLayout: @unchecked Sendable {
     init(_ key: TategakiLayoutKey) {
         let text = NSMutableAttributedString()
         var groups: [Range<Int>] = []
+        var rubyRuns: [Range<Int>] = []
         for run in key.runs {
+            let start = text.length
             Self.append(run, to: text, groups: &groups)
+            if let ruby = run.ruby, !ruby.isEmpty, text.length > start { rubyRuns.append(start..<text.length) }
         }
         string = text.string as NSString
         boundaries = Self.boundaries(of: string, groups: groups)
@@ -78,6 +87,17 @@ final class TategakiLayout: @unchecked Sendable {
             let count = max(CTTypesetterSuggestLineBreak(typesetter, start, limit), 1)
             lines.append((CTTypesetterCreateLine(typesetter, CFRange(location: start, length: count)), start..<start + count))
             start += count
+        }
+
+        // A run with ruby belongs in one column. One that was broken is longer than a column can be.
+        brokenRubyRuns = rubyRuns.filter { run in lines.count(where: { $0.range.overlaps(run) }) > 1 }
+        for run in brokenRubyRuns {
+            let excerpt = string.substring(with: NSRange(location: run.lowerBound, length: min(run.count, 16)))
+            Self.logger.warning("""
+                TategakiText: the run with ruby that starts “\(excerpt)” is longer than a column \
+                (maxHeight \(key.maxHeight, format: .fixed(precision: 0))) and was broken a character to a column. \
+                Give each word its own run, or allow a longer column.
+                """)
         }
 
         // Place the columns from right to left. A line's ascent points right in a column and its descent left, and

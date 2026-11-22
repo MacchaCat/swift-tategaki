@@ -29,7 +29,8 @@ public struct TategakiText: View {
         public var color: Color
         /// Ruby (furigana): small text to the right of the run that gives its reading. It is set over the run as
         /// a whole, and a run that would straddle the end of a column moves to the next one, so give each word its
-        /// own run. A run with ruby that is longer than a column comes out a character to a column.
+        /// own run. A run with ruby that is longer than a column comes out a character to a column, and a warning
+        /// that names it is logged.
         public var ruby: String?
         /// Emphasis marks, one to the right of each character. Spaces and punctuation take none. A run with ruby
         /// shows the ruby and no marks, because the two would share the same place.

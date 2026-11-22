@@ -106,7 +106,8 @@ between columns, add some with `columnGap`.
 
 Ruby belongs to its run as a whole. A run with ruby that would straddle the end of a column moves to the next
 column whole, so give each word its own run. A run with ruby that is longer than a column can't be set well: it
-comes out a character to a column.
+comes out a character to a column. When that happens the library logs a warning under the subsystem `Tategaki`
+that says so and gives the column height. The run's own text is logged as private data.
 
 ### Tate-chu-yoko (縦中横)
 
@@ -163,7 +164,8 @@ the rules of Japanese typesetting (JIS X 4051, JLREQ).
 - **Selection on iOS.** `selectable()` is macOS only.
 - **Selection by keyboard or by double-click.** Only dragging and Select All.
 - **Automatic tate-chu-yoko.** You mark the runs yourself.
-- **Ruby that breaks across columns.** A run with ruby longer than a column is set a character to a column.
+- **Ruby that breaks across columns.** A run with ruby longer than a column is set a character to a column, and
+  a warning is logged.
 - **Ruby and emphasis marks on the same characters.**
 - **The column pitch can't be set directly**, only adjusted with `columnGap`.
 - **The view doesn't size itself to the height it's offered.** You give `maxHeight`.

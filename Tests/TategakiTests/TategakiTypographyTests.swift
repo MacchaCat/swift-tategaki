@@ -39,12 +39,27 @@ import Testing
     // Three characters fit before the ruby run, which would straddle the end of the column.
     let moved = layout([run("前前前"), run("春夏", ruby: "はるなつ"), run("後")], maxHeight: 85)
     #expect(moved.columns.map(\.range) == [0..<3, 3..<6])
+    #expect(moved.brokenRubyRuns.isEmpty)
+}
+
+@Test func onlyRunsWithRubyThatWereBrokenAreReported() {
+    // Plain text and emphasised text break across columns as a matter of course; neither is a fault.
+    #expect(layout("春夏秋冬春夏秋冬春夏秋冬", maxHeight: 85).brokenRubyRuns.isEmpty)
+    #expect(layout([run("春夏秋冬春夏秋冬", emphasis: .sesame)], maxHeight: 85).brokenRubyRuns.isEmpty)
+    // Two runs too long for their column, with one that fits between them.
+    let twice = layout([run("春夏秋冬春夏", ruby: "はるなつあきふゆはるなつ"), run("山", ruby: "やま"),
+                        run("秋冬春夏秋冬", ruby: "あきふゆはるなつあきふゆ")], maxHeight: 85)
+    #expect(twice.brokenRubyRuns == [0..<6, 7..<13])
+    // With room enough, nothing is reported.
+    #expect(layout([run("春夏秋冬春夏", ruby: "はるなつあきふゆはるなつ")], maxHeight: 200).brokenRubyRuns.isEmpty)
+    #expect(layout([run("春夏秋冬春夏", ruby: "はるなつあきふゆはるなつ")]).brokenRubyRuns.isEmpty)
 }
 
 @Test func aRunWithRubyLongerThanAColumnLosesNoText() {
     // Core Text has nowhere good to break such a run and sets it a character to a column. That is poor, but
     // nothing may be dropped, overlong or drawn outside the view.
     let long = layout([run("前"), run("春夏秋冬春夏", ruby: "はるなつあきふゆはるなつ"), run("後")], maxHeight: 85)
+    #expect(long.brokenRubyRuns == [1..<7])
     #expect(long.columns.last?.range.upperBound == 8)
     #expect(long.columns.allSatisfy { $0.length <= 85 })
     #expect(long.size.height <= 86)
