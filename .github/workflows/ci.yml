@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+      - name: Build for iOS
+        run: xcodebuild -scheme swift-tategaki -destination 'generic/platform=iOS' build
