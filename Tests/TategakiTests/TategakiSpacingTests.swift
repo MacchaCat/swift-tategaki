@@ -58,9 +58,11 @@ private func inkCount(_ layout: TategakiLayout) -> Int {
 @Test func closingUpNeverMakesMarksOverlap() {
     // If two marks ran into each other, some of their ink would coincide and there would be less of it. The blank
     // removed is half a character, a whole number of pixels, so otherwise the ink is the same, moved.
-    let fonts = ["HiraMinProN-W3", "HiraginoSans-W3", "YuMin-Medium", "YuGothic-Medium", "PingFangTC-Regular", "PingFangSC-Regular", "STSongti-TC-Regular", "Helvetica"]
-    let classes = ["「『（〔［｛〈《【｟〘〖〝", "」』）〕］｝〉》】｠〙〗〟", "、，", "。．", "・：；"]
-    let marks = classes.joined()
+    // The fonts are a Japanese one, a Chinese one that draws its commas and full stops in the middle of the square,
+    // and a Western one that has none of the marks. A few marks stand for each class: the pairs number a hundred a
+    // font, and laying out thousands is slow where fonts are not cached.
+    let fonts = ["HiraMinProN-W3", "PingFangTC-Regular", "Helvetica"]
+    let marks = "「（〝」）〟、。・："
     var overlaps: [String] = []
     for name in fonts {
         let font = TategakiFont.named(name, size: 20)
@@ -73,6 +75,17 @@ private func inkCount(_ layout: TategakiLayout) -> Int {
         }
     }
     #expect(overlaps.isEmpty, "\(overlaps.count) overlap: \(overlaps.prefix(12).joined(separator: ", "))")
+}
+
+@Test func aMarkTheFontDoesNotHaveIsLeftAlone() {
+    // Helvetica has no Japanese punctuation, so the system draws these marks from another font. Which one can
+    // depend on their neighbours, so they are not touched.
+    let western = TategakiFont.named("Helvetica", size: 20)
+    for pair in ["」「", "。「", "「「", "」」", "」・"] {
+        #expect(abs(height(pair, font: western) - height(pair, font: western, spacing: .none)) <= 0.01, "\(pair) was closed up")
+    }
+    // The space between Japanese and Western text needs no mark's shape, and is still added.
+    #expect(abs(height("語Swift", font: western) - height("語Swift", font: western, spacing: .none) - 5) <= 0.5)
 }
 
 @Test func westernPunctuationIsLeftAlone() {

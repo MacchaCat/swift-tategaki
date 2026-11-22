@@ -75,8 +75,11 @@ struct SpacingRules {
     /// advance its ink starts and ends.
     private struct Box {
         var advance, inkStart, inkEnd, em: CGFloat
+        /// Whether the font has the character. If it doesn't, the system draws it from another font, and which one
+        /// can depend on the characters around it, so nothing about its shape can be relied on.
+        var isInFont: Bool
 
-        var isFullWidth: Bool { abs(advance - em) <= 0.05 * em }
+        var isFullWidth: Bool { isInFont && abs(advance - em) <= 0.05 * em }
         /// The second half of the advance holds no ink, so it can be taken away.
         var hasBlankAfter: Bool { isFullWidth && inkEnd <= 0.55 * em }
         /// The first half of the advance holds no ink.
@@ -98,7 +101,7 @@ struct SpacingRules {
 
     // The rules trust what a mark looks like, not what it is: a font may draw a full stop in the middle of its
     // square, as Chinese fonts do, and closing that up would run it into its neighbour. So each mark is shaped and
-    // its ink looked at before any blank is taken away.
+    // its ink looked at before any blank is taken away, and a mark the font doesn't have is left alone.
     private var boxes: [String: Box] = [:]
 
     private mutating func box(_ unit: Unit) -> Box {
@@ -109,9 +112,12 @@ struct SpacingRules {
         ]))
         let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
         let advance = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+        let characters = Array(String(unit.character).utf16)
+        var glyphs = [CGGlyph](repeating: 0, count: characters.count)
+        let isInFont = CTFontGetGlyphsForCharacters(unit.font, characters, &glyphs, characters.count)
         let box = ink.isNull || ink.isEmpty
-            ? Box(advance: advance, inkStart: 0, inkEnd: advance, em: unit.em)
-            : Box(advance: advance, inkStart: ink.minX, inkEnd: ink.maxX, em: unit.em)
+            ? Box(advance: advance, inkStart: 0, inkEnd: advance, em: unit.em, isInFont: isInFont)
+            : Box(advance: advance, inkStart: ink.minX, inkEnd: ink.maxX, em: unit.em, isInFont: isInFont)
         boxes[key] = box
         return box
     }

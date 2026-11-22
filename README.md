@@ -162,8 +162,9 @@ TategakiText(text).spacing(TategakiSpacing(spacesWesternText: false))
 TategakiText(text).spacing(.none)
 ```
 
-A mark is closed up only if the half to be removed is blank in the font. A font that draws its full stop in the
-middle of the square, as fonts for Chinese do, is left as it is.
+A mark is closed up only if the font has it and leaves the half to be removed blank. A font that draws its full
+stop in the middle of the square, as fonts for Chinese do, is left as it is, and so is a mark that the system has
+to draw from another font.
 
 This is not the whole of JLREQ. See below for what is missing.
 
@@ -216,7 +217,7 @@ Other things it doesn't do:
   every character, ruby and mark is drawn inside the view, the rectangle of each character, and what a selection
   copies. The rendered output was checked by eye.
 - The spacing rules were tested on every pair JLREQ 3.1.4 names and every mark of each class, in Hiragino Mincho
-  and Hiragino Sans. A further test sets every pair of marks in eight fonts, Chinese ones among them, and checks
+  and Hiragino Sans. A further test sets pairs of marks in a Japanese, a Chinese and a Western font and checks
   that closing them up never makes two marks overlap. With spacing off, the sample images are byte for byte those
   of 0.2.
 - CI builds and runs the tests on GitHub's macOS runner, which had Swift 6.3 on macOS 26 when this was written.
