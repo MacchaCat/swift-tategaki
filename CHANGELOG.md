@@ -2,6 +2,15 @@
 
 This project follows [Semantic Versioning](https://semver.org). Until 1.0, a minor version may change the API.
 
+## 0.4.0
+
+- Kanbun: `Run(_:okurigana:kaeriten:)` sets okurigana to the lower right of a character and a kaeriten to its
+  lower left, and opens a gap after the character where the marks need one.
+- Ruby on a run with okurigana or a kaeriten starts at the top of the run instead of being centred on it.
+- A character's rectangle, which selection uses, now starts where the character does. In 0.3 it started in the
+  middle of any space the spacing rules had added or taken away before the character. Text is laid out as it was:
+  the sample images without kanbun are those of 0.3 byte for byte.
+
 ## 0.3.0
 
 - Spacing that follows three clauses of JLREQ: consecutive punctuation is closed up (3.1.4), an opening bracket at

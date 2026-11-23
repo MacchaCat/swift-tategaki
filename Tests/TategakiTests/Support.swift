@@ -10,8 +10,9 @@ let mincho = TategakiFont.mincho(size: 20)
 let black = Color.Resolved(red: 0, green: 0, blue: 0, opacity: 1)
 
 func run(_ text: String, font: TategakiFont = mincho, ruby: String? = nil, emphasis: TategakiEmphasis? = nil,
-         tateChuYoko: Bool = false) -> TategakiLayoutKey.Run {
-    .init(text: text, font: font, color: black, ruby: ruby, emphasis: emphasis, isTateChuYoko: tateChuYoko)
+         tateChuYoko: Bool = false, okurigana: String? = nil, kaeriten: String? = nil) -> TategakiLayoutKey.Run {
+    .init(text: text, font: font, color: black, ruby: ruby, emphasis: emphasis, isTateChuYoko: tateChuYoko,
+          okurigana: okurigana, kaeriten: kaeriten)
 }
 
 func layout(_ runs: [TategakiLayoutKey.Run], maxHeight: CGFloat = .infinity, columnGap: CGFloat = 5,

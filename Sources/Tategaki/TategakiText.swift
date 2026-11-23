@@ -13,6 +13,7 @@ import SwiftUI
 /// `maxHeight`, and then the text continues in a new column to the left.
 ///
 /// Punctuation and Western text are spaced as Japanese typesetting spaces them; see ``TategakiSpacing``.
+/// A ``Run`` can also carry the okurigana and kaeriten of kanbun.
 ///
 /// Build the text from ``Run``s to give parts of it their own font and colour, ruby, emphasis marks, or to set
 /// digits upright:
@@ -41,15 +42,26 @@ public struct TategakiText: View {
         /// "12" of 12月 is set. It works for runs of one to four characters, and relies on the font having narrow
         /// forms of them; a longer run is set as it would be without this.
         public var isTateChuYoko: Bool
+        /// Okurigana for kanbun: small kana to the lower right of the run's last character, which tell how the
+        /// character is read in Japanese. They start beside the lower half of the character, or below its ruby if
+        /// it has any. A run with okurigana shows no emphasis marks, because the two would share the same place.
+        public var okurigana: String?
+        /// A kaeriten for kanbun: a small mark to the lower left of the run's last character, such as レ, 一, 二,
+        /// 上 or 下, which tells the order the characters are read in. Marks written together, such as 一レ, are
+        /// given together.
+        public var kaeriten: String?
 
         public init(_ text: String, font: TategakiFont = .gothic(size: 17), color: Color = .primary,
-                    ruby: String? = nil, emphasis: TategakiEmphasis? = nil, tateChuYoko: Bool = false) {
+                    ruby: String? = nil, emphasis: TategakiEmphasis? = nil, tateChuYoko: Bool = false,
+                    okurigana: String? = nil, kaeriten: String? = nil) {
             self.text = text
             self.font = font
             self.color = color
             self.ruby = ruby
             self.emphasis = emphasis
             self.isTateChuYoko = tateChuYoko
+            self.okurigana = okurigana
+            self.kaeriten = kaeriten
         }
     }
 
@@ -137,7 +149,8 @@ public struct TategakiText: View {
         TategakiLayoutKey(
             runs: runs.map {
                 .init(text: $0.text, font: $0.font, color: $0.color.resolve(in: environment),
-                      ruby: $0.ruby, emphasis: $0.emphasis, isTateChuYoko: $0.isTateChuYoko)
+                      ruby: $0.ruby, emphasis: $0.emphasis, isTateChuYoko: $0.isTateChuYoko,
+                      okurigana: $0.okurigana, kaeriten: $0.kaeriten)
             },
             maxHeight: maxHeight,
             columnGap: columnGap,

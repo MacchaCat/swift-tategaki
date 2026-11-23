@@ -67,4 +67,18 @@ import Tategaki
         ruby("山路", "やまみち"), text("Swift"), marked("重要"), text("ABC"), ruby("言語", "げんご"), text("12"), marked("回"),
         text("「"), ruby("草枕", "くさまくら"), text("」「"), upright("39"), text("」"),
     ], maxHeight: 330, columnGap: 6).spacing(spacing))
+
+    // Kanbun. The kaeriten of the first sentence are those of the Ministry of Education's 1912 report, as quoted
+    // in the Japanese Wikipedia article 漢文訓読; the okurigana follow the reading given there, 楚人に盾と矛とを
+    // 鬻ぐ者有り. The second is 書を読む, and the third 泰山に登る.
+    let large = TategakiFont.mincho(size: 30)
+    func kan(_ string: String, _ okurigana: String? = nil, _ kaeriten: String? = nil, reading: String? = nil) -> TategakiText.Run {
+        .init(string, font: large, color: .black, ruby: reading, okurigana: okurigana, kaeriten: kaeriten)
+    }
+    let kanbun: [TategakiText.Run] = [
+        kan("楚"), kan("人", "ニ"), kan("有", "リ", "下"), kan("鬻", "グ", "二", reading: "ひさ"), kan("盾", "ト"), kan("與", "ヲ", "一レ"), kan("矛"), kan("者", nil, "上"), kan("。\n"),
+        kan("讀", "ム", "レ"), kan("書", "ヲ"), kan("。"), kan("登", "ル", "二"), kan("泰"), kan("山", "ニ", "一"), kan("。"),
+    ]
+    try write("kanbun.png", TategakiText(runs: kanbun, columnGap: 14).spacing(spacing))
+    try write("kanbun-wrapped.png", TategakiText(runs: kanbun, maxHeight: 190, columnGap: 14).spacing(spacing))
 }

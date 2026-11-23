@@ -173,13 +173,20 @@ struct SpacingRules {
     /// part would get the whole of the ruby.
     @discardableResult
     private static func kern(_ text: NSMutableAttributedString, after unit: Unit, by amount: CGFloat) -> Bool {
+        addSpace(amount, after: unit.range, in: text)
+    }
+
+    /// Adds to the space after the character at a range, on top of any that is there already, and says whether it
+    /// could. See `kern(_:after:by:)` for when it can't.
+    @discardableResult
+    static func addSpace(_ amount: CGFloat, after range: NSRange, in text: NSMutableAttributedString) -> Bool {
         var annotated = NSRange()
         let whole = NSRange(location: 0, length: text.length)
-        if text.attribute(rubyKey, at: unit.range.location, longestEffectiveRange: &annotated, in: whole) != nil,
-           annotated != unit.range {
+        if text.attribute(rubyKey, at: range.location, longestEffectiveRange: &annotated, in: whole) != nil, annotated != range {
             return false
         }
-        text.addAttribute(kernKey, value: amount, range: unit.range)
+        let existing = (text.attribute(kernKey, at: range.location, effectiveRange: nil) as? NSNumber).map { CGFloat($0.doubleValue) } ?? 0
+        text.addAttribute(kernKey, value: existing + amount, range: range)
         return true
     }
 
@@ -199,14 +206,18 @@ struct SpacingRules {
     /// The space added after the last character of a line, which Core Text counts in the line's length although
     /// nothing comes after it there. Space taken away is not given back: a mark that ends a column and has lost the
     /// blank after it is simply half a character long, as JLREQ 3.1.9 allows at the end of a line.
-    static func trailingSpace(of text: NSAttributedString, in range: Range<Int>) -> CGFloat {
+    ///
+    /// `keeping` are gaps that are meant to follow their character wherever it falls, by its UTF-16 offset: the room
+    /// for kunten that hang below the character.
+    static func trailingSpace(of text: NSAttributedString, in range: Range<Int>, keeping: [Int: CGFloat] = [:]) -> CGFloat {
         let string = text.string as NSString
         var end = range.upperBound
         while end > range.lowerBound, let scalar = Unicode.Scalar(string.character(at: end - 1)), CharacterSet.newlines.contains(scalar) {
             end -= 1
         }
         guard end > range.lowerBound, let kern = text.attribute(kernKey, at: end - 1, effectiveRange: nil) as? NSNumber else { return 0 }
-        return max(CGFloat(kern.doubleValue), 0)
+        let last = string.rangeOfComposedCharacterSequence(at: end - 1).location
+        return max(CGFloat(kern.doubleValue) - (keeping[last] ?? 0), 0)
     }
 
     private static func units(of text: NSAttributedString, groups: [Range<Int>]) -> [Unit] {

@@ -13,6 +13,8 @@ struct TategakiLayoutKey: Hashable, Sendable {
         var ruby: String? = nil
         var emphasis: TategakiEmphasis? = nil
         var isTateChuYoko = false
+        var okurigana: String? = nil
+        var kaeriten: String? = nil
     }
 
     var runs: [Run]
@@ -64,6 +66,26 @@ final class TategakiLayout: @unchecked Sendable {
     /// Marks whose ink starts before the place Core Text reports for them, because the blank ahead of them was
     /// closed up: how far before, by UTF-16 offset. See `SpacingRules.adjust`.
     private let boundaryShifts: [Int: CGFloat]
+    /// The space added or taken away before each character, by the character's UTF-16 offset. Core Text reports a
+    /// character's place as the middle of such a space, so half of it has to be added to know where the character
+    /// itself begins.
+    private let spaceBefore: [Int: CGFloat]
+
+    /// A kunten mark, placed: a small line of its own that starts at `y` and runs down the centre line `x`.
+    struct PlacedMark {
+        var line: CTLine
+        var x: CGFloat
+        var y: CGFloat
+        var length: CGFloat
+        var halfWidth: CGFloat
+        var characterIndex: Int
+    }
+
+    /// The okurigana and kaeriten, each where its character is.
+    let marks: [PlacedMark]
+    /// The runs whose kunten have no room, as UTF-16 ranges. A run of several characters that share one reading
+    /// can't have a gap opened after it, so its marks may run into the next character. Each is reported in the log.
+    let crowdedKuntenRuns: [Range<Int>]
 
     private static let logger = Logger(subsystem: "Tategaki", category: "layout")
 
@@ -74,15 +96,57 @@ final class TategakiLayout: @unchecked Sendable {
         let text = NSMutableAttributedString()
         var groups: [Range<Int>] = []
         var rubyRuns: [Range<Int>] = []
+        var kuntenRuns: [(run: TategakiLayoutKey.Run, range: Range<Int>)] = []
         for run in key.runs {
             let start = text.length
             Self.append(run, to: text, groups: &groups)
             if let ruby = run.ruby, !ruby.isEmpty, text.length > start { rubyRuns.append(start..<text.length) }
+            if run.okurigana?.isEmpty == false || run.kaeriten?.isEmpty == false, text.length > start {
+                kuntenRuns.append((run, start..<text.length))
+            }
         }
         string = text.string as NSString
         boundaries = Self.boundaries(of: string, groups: groups)
         var rules = SpacingRules()
         boundaryShifts = rules.adjust(text, groups: groups, spacing: key.spacing)
+
+        // Kunten hang on the last character of their run, which is followed by a gap long enough for them. The gap
+        // is added to whatever space the spacing rules put there.
+        var pending: [Kunten.Mark] = []
+        var gaps: [Int: CGFloat] = [:]
+        var crowded: [Range<Int>] = []
+        for (run, range) in kuntenRuns {
+            guard let plan = Kunten.plan(for: run, at: range, in: string) else { continue }
+            pending += plan.marks
+            guard plan.gap > 0 else { continue }
+            if SpacingRules.addSpace(plan.gap, after: plan.character, in: text) {
+                gaps[plan.character.location] = plan.gap
+            } else {
+                crowded.append(range)
+            }
+        }
+        crowdedKuntenRuns = crowded
+        for run in crowded {
+            let excerpt = string.substring(with: NSRange(location: run.lowerBound, length: min(run.count, 16)))
+            Self.logger.warning("""
+                TategakiText: the run that starts “\(excerpt)” has okurigana or kaeriten, and one reading over \
+                several characters. No gap can be opened after it for the marks, so they may run into the next \
+                character. Give the run's last character a run of its own.
+                """)
+        }
+
+        // All the kerning is in place now. Note what precedes each character.
+        var before: [Int: CGFloat] = [:]
+        let characters = text.string as NSString
+        text.enumerateAttribute(.init(kCTKernAttributeName as String), in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard let kern = (value as? NSNumber).map({ CGFloat($0.doubleValue) }), kern != 0 else { return }
+            var index = range.location
+            while index < NSMaxRange(range) {
+                index = NSMaxRange(characters.rangeOfComposedCharacterSequence(at: index))
+                before[index] = kern
+            }
+        }
+        spaceBefore = before
 
         // Break the text into lines no longer than the columns may be.
         let typesetter = CTTypesetterCreateWithAttributedString(text)
@@ -118,7 +182,7 @@ final class TategakiLayout: @unchecked Sendable {
         let metrics = lines.map { entry -> Metrics in
             var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
             let length = CGFloat(CTLineGetTypographicBounds(entry.line, &ascent, &descent, &leading))
-                - SpacingRules.trailingSpace(of: text, in: entry.range)
+                - SpacingRules.trailingSpace(of: text, in: entry.range, keeping: gaps)
             let lift = key.spacing.setsColumnTopsFlush ? rules.lift(forColumnAt: entry.range.lowerBound, of: text, groups: groups) : 0
             let bareLine = CTTypesetterCreateLine(bareTypesetter, CFRange(location: entry.range.lowerBound, length: entry.range.count))
             var halfRight: CGFloat = 0
@@ -147,6 +211,19 @@ final class TategakiLayout: @unchecked Sendable {
             top = min(top, metric.ink.minX - metric.lift)
             bottom = max(bottom, metric.length - metric.lift, metric.ink.maxX - metric.lift)
         }
+        // Kunten are set outside Core Text's lines, so the bounds have to be told about them. Each is placed from
+        // its character: so far down the column, so far from the centre line.
+        var relative: [(column: Int, along: CGFloat, mark: Kunten.Mark)] = []
+        for mark in pending {
+            guard let column = lines.firstIndex(where: { $0.range.contains(mark.characterIndex) }) else { continue }
+            let start = mark.characterIndex > lines[column].range.lowerBound ? (before[mark.characterIndex] ?? 0) / 2 : 0
+            let along = CGFloat(CTLineGetOffsetForStringIndex(lines[column].line, mark.characterIndex, nil)) + start + mark.dy
+            relative.append((column, along, mark))
+            left = min(left, xs[column] + mark.dx - mark.halfWidth)
+            right = max(right, xs[column] + mark.dx + mark.halfWidth)
+            top = min(top, along - metrics[column].lift)
+            bottom = max(bottom, along + mark.length - metrics[column].lift)
+        }
         if lines.isEmpty { left = 0; right = 0 }
         left = floor(left)
         top = floor(top)
@@ -154,6 +231,11 @@ final class TategakiLayout: @unchecked Sendable {
         columns = zip(lines, zip(xs, metrics)).map { entry, placed in
             Column(line: entry.line, range: entry.range, x: placed.0 - left, top: -top - placed.1.lift, length: placed.1.length,
                    halfLeft: placed.1.descent, halfRight: placed.1.halfRight)
+        }
+        marks = relative.map { entry in
+            PlacedMark(line: entry.mark.line, x: xs[entry.column] - left + entry.mark.dx,
+                       y: -top - metrics[entry.column].lift + entry.along, length: entry.mark.length,
+                       halfWidth: entry.mark.halfWidth, characterIndex: entry.mark.characterIndex)
         }
     }
 
@@ -176,7 +258,15 @@ final class TategakiLayout: @unchecked Sendable {
         }
 
         if let ruby = run.ruby, !ruby.isEmpty {
-            attributes[rubyKey] = annotation(ruby, scale: rubyScale)
+            // A reading is centred on its run, except on a run with kunten. There it starts at the top of the run,
+            // as readings do in kanbun, and stays there however long a gap follows the run for its marks: Core Text
+            // would otherwise centre it over the run and the gap together.
+            let hasKunten = run.okurigana?.isEmpty == false || run.kaeriten?.isEmpty == false
+            attributes[rubyKey] = annotation(ruby, scale: rubyScale, alignment: hasKunten ? .start : .auto)
+            text.append(NSAttributedString(string: run.text, attributes: attributes))
+        } else if run.okurigana?.isEmpty == false {
+            // Okurigana take the place beside the character where emphasis marks would go, so a run with okurigana
+            // has no marks.
             text.append(NSAttributedString(string: run.text, attributes: attributes))
         } else if let emphasis = run.emphasis, isGroup {
             // One mark for the whole group, which reads as one character.
@@ -198,8 +288,8 @@ final class TategakiLayout: @unchecked Sendable {
         if isGroup { groups.append(start..<text.length) }
     }
 
-    private static func annotation(_ text: String, scale: CGFloat) -> CTRubyAnnotation {
-        CTRubyAnnotationCreateWithAttributes(.auto, .auto, .before, text as CFString,
+    private static func annotation(_ text: String, scale: CGFloat, alignment: CTRubyAlignment = .auto) -> CTRubyAnnotation {
+        CTRubyAnnotationCreateWithAttributes(alignment, .auto, .before, text as CFString,
                                              [kCTRubyAnnotationSizeFactorAttributeName: scale] as CFDictionary)
     }
 
@@ -229,6 +319,14 @@ final class TategakiLayout: @unchecked Sendable {
             context.textMatrix = .identity
             context.textPosition = .zero
             CTLineDraw(column.line, context)
+            context.restoreGState()
+        }
+        for mark in marks {
+            context.saveGState()
+            context.concatenate(CGAffineTransform(a: 0, b: 1, c: 1, d: 0, tx: mark.x, ty: mark.y))
+            context.textMatrix = .identity
+            context.textPosition = .zero
+            CTLineDraw(mark.line, context)
             context.restoreGState()
         }
     }
@@ -295,9 +393,10 @@ final class TategakiLayout: @unchecked Sendable {
 
     private func offset(of index: Int, in column: Column) -> CGFloat {
         if index >= textEnd(of: column) { return max(column.length, CGFloat(CTLineGetOffsetForStringIndex(column.line, index, nil))) }
-        // A mark whose leading blank was closed up starts, to the eye, where its ink does.
-        let shift = index > column.range.lowerBound ? boundaryShifts[index] ?? 0 : 0
-        return CGFloat(CTLineGetOffsetForStringIndex(column.line, index, nil)) + shift
+        guard index > column.range.lowerBound else { return CGFloat(CTLineGetOffsetForStringIndex(column.line, index, nil)) }
+        // Where the character itself begins: Core Text gives the middle of any space that was added or taken away
+        // before it. A mark whose leading blank was closed up starts, to the eye, where its ink does.
+        return CGFloat(CTLineGetOffsetForStringIndex(column.line, index, nil)) + (spaceBefore[index] ?? 0) / 2 + (boundaryShifts[index] ?? 0)
     }
 
     /// The end of a column's text, before the line break that ends the column if it has one.

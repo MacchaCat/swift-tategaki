@@ -1,7 +1,7 @@
 # Tategaki
 
-Vertical Japanese text (縦書き) for SwiftUI, with ruby, tate-chu-yoko, emphasis marks and the punctuation spacing
-of Japanese typesetting.
+Vertical Japanese text (縦書き) for SwiftUI, with ruby, tate-chu-yoko, emphasis marks, the punctuation spacing of
+Japanese typesetting, and the okurigana and kaeriten of kanbun.
 
 SwiftUI has no vertical text. `TategakiText` lays text out with Core Text in columns that run top to bottom and
 stack right to left, and draws it in a view of exactly the size the columns need. It has no dependencies and uses no
@@ -139,6 +139,50 @@ A mark is set to the right of each character of the run; spaces and punctuation 
 `.sesame` (﹅), `.openSesame` (﹆), `.dot`, `.circle`, and `.custom("▲")` for a mark of your own. A run that has
 ruby shows the ruby and no marks, because the two would share the same place.
 
+### Kanbun (漢文): okurigana and kaeriten
+
+<img src="Documentation/kanbun.png" alt="Three sentences of classical Chinese set vertically, with small katakana to the lower right of some characters and small marks such as レ, 一, 二, 上 and 下 to their lower left" height="420">
+
+```swift
+TategakiText(runs: [
+    .init("讀", okurigana: "ム", kaeriten: "レ"),
+    .init("書", okurigana: "ヲ"),
+    .init("。"),
+])
+```
+
+Okurigana are set to the lower right of a character and kaeriten to its lower left, both at half the character's
+size. They hang on the last character of their run.
+
+- **Okurigana** start beside the lower half of the character. If the character has ruby, they start below it, and
+  the ruby starts at the top of the character instead of being centred on it.
+- **Kaeriten** sit directly below the left side of the character. Marks that are written together, such as 一レ
+  or 上レ, are given together and overlap as they do in print.
+- **Characters are set solid.** A gap follows a character only where its marks need one, and is as long as they
+  need.
+- The copied text and the accessibility label are the characters alone.
+
+The sizes and positions are those of the [`kanbun` package](https://ctan.org/pkg/kanbun) for LaTeX in its solid
+setting: marks at half size, okurigana tucked in by one mark's height, kaeriten below the character. They haven't
+been checked against JIS X 4051 or the Ministry of Education's report of 1912 that school textbooks follow.
+Neither was available when this was written.
+
+In the picture, the kaeriten of the first sentence are those of that report as the Japanese Wikipedia article
+[漢文訓読](https://ja.wikipedia.org/wiki/漢文訓読) quotes them, and the okurigana follow the reading it gives.
+
+Not done yet:
+
+- **The left side.** A character read twice (再読文字) has a second reading and okurigana on its left.
+- **The line that joins a compound** (竪点).
+- **A レ at the foot of a column.** It stays with its character. The 1912 report, as Wikipedia quotes it, puts it
+  at the head of the next column.
+- **Evenly spaced characters**, which printed kanbun often has and the `kanbun` package sets by default.
+- **Punctuation in the gap.** The `kanbun` package tucks a comma or full stop into the gap beside a kaeriten.
+  Here it takes its own place after the gap.
+- **Emphasis marks together with okurigana.** A run with okurigana shows no emphasis marks.
+- **Marks on a run whose ruby covers several characters.** No gap can be opened after such a run, so the marks
+  may run into the next character, and a warning is logged. Give the last character a run of its own.
+
 ### Spacing
 
 Core Text gives every punctuation mark a full character's width, so two in a row stand a whole character apart,
@@ -216,6 +260,10 @@ Other things it doesn't do:
 - Built and tested on macOS 27 with Swift 6.4 (Xcode 27). The tests check column count and order, bounds, that
   every character, ruby and mark is drawn inside the view, the rectangle of each character, and what a selection
   copies. The rendered output was checked by eye.
+- Kanbun marks are tested for where they sit, the gap they open, that they stay in their character's column and
+  inside the view, and that a reading and okurigana never overlap. The rendered output was compared by eye with
+  the `kanbun` package's example sheet for where kaeriten sit, how 上レ is composed and where okurigana start.
+  Punctuation differs from it, as noted above.
 - The spacing rules were tested on every pair JLREQ 3.1.4 names and every mark of each class, in Hiragino Mincho
   and Hiragino Sans. A further test sets pairs of marks in a Japanese, a Chinese and a Western font and checks
   that closing them up never makes two marks overlap. With spacing off, the sample images are byte for byte those
@@ -249,6 +297,8 @@ SwiftUI で日本語を縦書きで表示するためのライブラリです。
 
 約物の連続の詰め、行頭の始め括弧の天付き、和欧文間の四分アキを行います（JLREQ 3.1.4、3.1.5、3.2.6）。
 行末の約物の処理、ぶら下げ、強い禁則には対応していません。
+
+漢文の送り仮名と返り点に対応しています。再読文字の左側の送り仮名と竪点には対応していません。
 
 ## License
 
